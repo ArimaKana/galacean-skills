@@ -2,10 +2,6 @@
 
 本项目包含了一系列针对 Galacean Engine 的 AI 编程助手 Skills 配置。这些 Skills 旨在帮助 AI 更好地理解和生成符合 Galacean Engine 最佳实践的代码。
 
-## 什么是 Skills？
-
-Skills 是一组预定义的上下文和指令，可以被加载到 AI 编程助手（如 Claude Desktop, Copilot 等支持 MCP 或类似机制的工具）中，以便在涉及特定领域开发时提供准确的指导及代码片段。
-
 ## 包含的 Skills
 
 本项目目前包含以下 Skills，涵盖了 Galacean 引擎开发的核心模块：
