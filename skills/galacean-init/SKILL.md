@@ -40,9 +40,21 @@ function createCanvas(width?: number, height?: number): HTMLCanvasElement {
   return canvas
 }
 
-function initEngine() {
+async function initEngine() {
   const canvas = createCanvas();
   document.body.appendChild(canvas);
+  
+  // 获取设备像素比 (DPR) - 用于解决高分辨率屏幕模糊问题
+  const dpr = window.devicePixelRatio || 1;
+  
+  // 设置 canvas 实际像素尺寸以匹配设备像素比
+  const resizeCanvas = () => {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+  };
+  resizeCanvas();
+  
   const engine = await WebGLEngine.create({
     canvas,
     // 场景 1: 需要真实的物理反馈（如重力、反弹、复杂的物理交互）
@@ -60,15 +72,74 @@ function initEngine() {
     // 不配置 physics
   });
 
+  // 设置引擎的像素比，确保渲染清晰度
+  engine.canvas.resizeByClientSize(dpr);
+
   canvas.style.touchAction = 'none'
   const scene = engine.sceneManager.activeScene
   const rootEntity = scene.createRootEntity()
+  
+  // 窗口大小变化时更新 canvas 尺寸
+  window.addEventListener('resize', () => {
+    engine.canvas.resizeByClientSize(dpr);
+  });
 
   engine.run()
 }
 ```
 
-## 3. 场景与环境 (Scene)
+## 3. 高分辨率屏幕适配 (DPR 处理)
+
+**适用场景**：解决在 Retina 屏、手机等高 DPR (Device Pixel Ratio) 设备上画面模糊的问题。
+
+**核心机制**：
+- 获取设备的 `devicePixelRatio`（通常为 1, 2, 3）
+- 设置 Canvas 的实际像素尺寸为 CSS 尺寸的 DPR 倍
+- 调用引擎的 `resizeByClientSize(dpr)` 方法通知引擎适配
+
+**代码模式**：
+
+```typescript
+async function initHighDPREngine() {
+  const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+  
+  // 1. 获取设备像素比
+  const dpr = window.devicePixelRatio || 1;
+  
+  // 2. 初始化时设置 canvas 实际像素尺寸
+  const resizeCanvas = () => {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+  };
+  resizeCanvas();
+  
+  // 3. 创建引擎
+  const engine = await WebGLEngine.create({
+    canvas,
+    physics: new LitePhysics(),
+  });
+  
+  // 4. 关键：设置引擎的像素比
+  engine.canvas.resizeByClientSize(dpr);
+  
+  // 5. 窗口变化时重新适配
+  window.addEventListener('resize', () => {
+    engine.canvas.resizeByClientSize(dpr);
+    // 如果有相机，也需要更新 aspectRatio
+    // camera.aspectRatio = window.innerWidth / window.innerHeight;
+  });
+  
+  return engine;
+}
+```
+
+**注意事项**：
+- 必须在创建引擎后调用 `resizeByClientSize(dpr)`
+- 如果手动设置了 `canvas.width/height`，需要与 `resizeByClientSize` 保持一致
+- 在 resize 事件中需要同时更新引擎和相机参数
+
+## 4. 场景与环境 (Scene)
 
 - **职责**：设置背景、相机、灯光、后处理效果。
 - **相机**：创建 Camera Entity，设置位置和裁剪。
