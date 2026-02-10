@@ -123,3 +123,93 @@ export class GameControlScript extends Script {
   }
 }
 ```
+
+## 5. 摇杆/触摸控制最佳实践
+
+**适用场景**：移动设备上的虚拟摇杆控制，需要全屏响应触摸事件。
+
+### 核心要点
+
+1. **全屏触摸**：不要在 touchstart 中限制触摸区域（如只响应左半边），让用户可以在屏幕任意位置开始控制
+2. **事件处理**：同时处理 `touchend` 和 `touchcancel`，避免意外情况下摇杆卡住
+3. **坐标转换**：使用 `getBoundingClientRect()` 获取准确的触摸位置
+
+### 代码模式
+
+```typescript
+export class JoystickScript extends Script {
+  private joystickActive: boolean = false;
+  private joystickCenter: { x: number, y: number } = { x: 0, y: 0 };
+  private joystickRadius: number = 60;
+
+  onAwake() {
+    const canvas = document.getElementById('canvas');
+    if (!canvas) return;
+
+    // 触摸开始 - 全屏任意位置都可触发
+    canvas.addEventListener('touchstart', (e: TouchEvent) => {
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+
+      // 不要在 here 限制区域，让全屏都可以触发摇杆
+      this.joystickActive = true;
+      this.joystickCenter = { x: touch.clientX, y: touch.clientY };
+      
+      // 显示摇杆UI在触摸位置
+      this.showJoystickAt(x, y);
+    });
+
+    // 触摸移动
+    canvas.addEventListener('touchmove', (e: TouchEvent) => {
+      if (!this.joystickActive) return;
+      e.preventDefault(); // 防止页面滚动
+      
+      const touch = e.touches[0];
+      this.updateJoystick(touch.clientX, touch.clientY);
+    });
+
+    // 触摸结束
+    canvas.addEventListener('touchend', () => {
+      this.resetJoystick();
+    });
+    
+    // 触摸取消（如来电打断）
+    canvas.addEventListener('touchcancel', () => {
+      this.resetJoystick();
+    });
+  }
+
+  private updateJoystick(touchX: number, touchY: number): void {
+    const dx = touchX - this.joystickCenter.x;
+    const dy = touchY - this.joystickCenter.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // 限制摇杆移动范围
+    let normalizedX = dx;
+    let normalizedY = dy;
+    if (distance > this.joystickRadius) {
+      normalizedX = (dx / distance) * this.joystickRadius;
+      normalizedY = (dy / distance) * this.joystickRadius;
+    }
+
+    // 计算归一化方向 (-1 到 1)
+    const dirX = normalizedX / this.joystickRadius;
+    const dirY = normalizedY / this.joystickRadius;
+    
+    // 应用移动逻辑
+    this.applyMovement(dirX, dirY);
+  }
+
+  private resetJoystick(): void {
+    this.joystickActive = false;
+    this.hideJoystick();
+    this.applyMovement(0, 0); // 停止移动
+  }
+
+  // 抽象方法：由子类实现
+  showJoystickAt(x: number, y: number): void {}
+  hideJoystick(): void {}
+  applyMovement(x: number, y: number): void {}
+```
