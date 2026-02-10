@@ -1,6 +1,6 @@
 ---
 name: galacean-entity
-description: 此 Skill 包含了 Galacean Engine 中 Entity（实体）的核心操作，包括创建、层级管理以及 Transform（变换）操作（平移、旋转、缩放）。
+description: 此 Skill 包含了 Galacean Engine 中 Entity（实体）的核心操作，包括创建、层级管理、Transform（变换）操作以及全局状态管理
 ---
 
 # Galacean Entity 操作
@@ -96,7 +96,85 @@ transform.setScale(2, 2, 2);
 transform.scale.set(2, 2, 2);
 ```
 
-## 3. 常见脚本示例
+## 3. 全局状态管理（获取 GameManager）
+
+### 问题背景
+
+Galacean Engine **没有**提供类似 `scene.findComponentByType(GameManager)` 的 API。如果多个脚本需要访问同一个管理器（如 GameManager），需要使用**全局状态模式**。
+
+### 解决方案：单例模式
+
+```typescript
+// ==================== GameState.ts ====================
+export class GameState {
+  private static instance: GameState;
+  private _gameManager: GameManager | null = null;
+
+  static getInstance(): GameState {
+    if (!GameState.instance) {
+      GameState.instance = new GameState();
+    }
+    return GameState.instance;
+  }
+
+  setGameManager(manager: GameManager): void {
+    this._gameManager = manager;
+  }
+
+  getGameManager(): GameManager | null {
+    return this._gameManager;
+  }
+}
+
+// ==================== GameManager.ts ====================
+import { Script } from "@galacean/engine";
+import { GameState } from "./GameState";
+
+export class GameManager extends Script {
+  onAwake(): void {
+    // 注册自己到全局状态
+    GameState.getInstance().setGameManager(this);
+  }
+
+  gameOver(isWin: boolean): void {
+    // 游戏结束逻辑
+  }
+}
+
+// ==================== EnemyScript.ts ====================
+import { Script } from "@galacean/engine";
+import { GameState } from "./GameState";
+
+export class EnemyScript extends Script {
+  onUpdate(deltaTime: number): void {
+    // 检测是否接触玩家...
+    
+    if (接触玩家) {
+      // 通过 GameState 获取 GameManager
+      const gameManager = GameState.getInstance().getGameManager();
+      if (gameManager) {
+        gameManager.gameOver(false);
+      }
+    }
+  }
+}
+```
+
+### 使用场景
+
+| 场景 | 使用方式 |
+|------|----------|
+| 敌人碰到玩家，触发游戏结束 | `GameState.getInstance().getGameManager()?.gameOver(false)` |
+| 暂停游戏 | `GameState.getInstance().getGameManager()?.pause()` |
+| 获取游戏状态 | `GameState.getInstance().getGameManager()?.isPlaying` |
+
+### 注意事项
+
+1. **避免循环依赖**：不要在 GameState 中引用具体脚本类型
+2. **类型安全**：getGameManager() 可能返回 null，使用时需要判断
+3. **生命周期**：在 Script 的 `onAwake()` 中注册，在 `onDestroy()` 中清理
+
+## 4. 常见脚本示例
 
 ```typescript
 import { Script, Vector3 } from "@galacean/engine";
@@ -112,5 +190,47 @@ export class RotateScript extends Script {
     // 移动: 沿自身 Z 轴向前移动
     this.entity.transform.translate(0, 0, 5 * deltaTime, true);
   }
+}
+```
+
+## 5. 实用工具函数
+
+### 遍历实体层级
+
+```typescript
+// 递归遍历所有子实体
+function traverseEntities(entity: Entity, callback: (e: Entity) => void): void {
+  callback(entity);
+  for (const child of entity.children) {
+    traverseEntities(child, callback);
+  }
+}
+
+// 查找特定名称的实体（递归）
+function findEntityByName(root: Entity, name: string): Entity | null {
+  if (root.name === name) return root;
+  for (const child of root.children) {
+    const found = findEntityByName(child, name);
+    if (found) return found;
+  }
+  return null;
+}
+```
+
+### 安全获取组件
+
+```typescript
+// 安全获取组件，如果不存在返回 null
+function safeGetComponent<T extends Script>(
+  entity: Entity,
+  componentType: new () => T
+): T | null {
+  return entity.getComponent(componentType);
+}
+
+// 使用示例
+const script = safeGetComponent(entity, MyScript);
+if (script) {
+  script.doSomething();
 }
 ```
