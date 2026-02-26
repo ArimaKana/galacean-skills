@@ -212,4 +212,228 @@ export class JoystickScript extends Script {
   showJoystickAt(x: number, y: number): void {}
   hideJoystick(): void {}
   applyMovement(x: number, y: number): void {}
+}
 ```
+
+## 6. 移动端触摸松开事件处理 (Touch Release)
+
+### 6.1 问题描述
+
+在使用 Galacean 的 `inputManager.pointers` 处理拖拽交互时，移动端触摸松开（touchend）会遇到一个关键问题：
+
+**问题**：当手指从屏幕上松开时，`pointers` 数组会立即变为空，导致 `PointerPhase.Up` 事件无法被捕获。
+
+**症状**：
+- 鼠标操作（PC端）：拖拽松开正常工作 ✅
+- 触摸操作（移动端）：拖拽后松手无反应，物体卡在拖拽状态 ❌
+
+### 6.2 错误的实现方式
+
+```typescript
+// ❌ 这种方式在移动端会失败
+onUpdate() {
+  const pointers = this.engine.inputManager.pointers;
+  
+  if (pointers && pointers.length > 0) {
+    const pointer = pointers[0];
+    
+    if (pointer.phase === PointerPhase.Down) {
+      this.startDrag();
+    }
+    else if (pointer.phase === PointerPhase.Move && this.isDragging) {
+      this.updateDrag();
+    }
+    else if (pointer.phase === PointerPhase.Up && this.isDragging) {
+      // ❌ 在移动端，手指松开后 pointers 数组为空
+      // 这段代码永远不会执行！
+      this.endDrag();
+    }
+  }
+}
+```
+
+**问题分析**：
+1. 触摸按下时：指针加入 `pointers` 数组，`phase = Down`
+2. 触摸移动时：指针仍在数组中，`phase = Move`
+3. 触摸松开时：指针从数组中移除，`pointers.length = 0`，导致整个 `if` 块不执行
+
+### 6.3 正确的实现方式
+
+**核心思路**：当 `pointers` 为空但 `isDragging` 仍为 `true` 时，说明手指刚刚松开。
+
+```typescript
+// ✅ 兼容 PC 和移动端的正确实现
+export class DragScript extends Script {
+  private isDragging: boolean = false;
+  private currentDragPos: Vector3 = new Vector3();
+
+  onUpdate() {
+    const inputManager = this.engine.inputManager;
+    const pointers = inputManager.pointers;
+
+    if (pointers && pointers.length > 0) {
+      const pointer = pointers[0];
+
+      // 开始拖拽（鼠标按下 / 触摸开始）
+      if (pointer.phase === PointerPhase.Down) {
+        this.handlePointerDown(pointer);
+      }
+      // 拖拽中（鼠标移动 / 触摸移动）
+      else if (pointer.phase === PointerPhase.Move && this.isDragging) {
+        this.handlePointerMove(pointer);
+      }
+      // 结束拖拽（鼠标松开 - 仅 PC 端会触发）
+      else if (pointer.phase === PointerPhase.Up && this.isDragging) {
+        this.handlePointerUp();
+      }
+    }
+    // ✅ 关键：处理移动端触摸松开
+    // 当 pointers 为空但还在拖拽状态时，说明手指刚松开
+    else if (this.isDragging) {
+      this.handlePointerUp();
+    }
+  }
+
+  private handlePointerDown(pointer: any) {
+    // 检查是否点击在目标区域
+    const worldPos = this.screenToWorld(pointer.position.x, pointer.position.y);
+    if (this.isInTargetArea(worldPos)) {
+      this.isDragging = true;
+    }
+  }
+
+  private handlePointerMove(pointer: any) {
+    const worldPos = this.screenToWorld(pointer.position.x, pointer.position.y);
+    if (worldPos) {
+      this.currentDragPos.copyFrom(worldPos);
+      this.updateDragPosition(worldPos);
+    }
+  }
+
+  private handlePointerUp() {
+    if (!this.isDragging) return;
+    
+    this.isDragging = false;
+    
+    // 使用 currentDragPos 计算松手时的位置/速度
+    // 注意：此时无法从 pointer 获取位置，必须使用之前保存的值
+    this.performAction(this.currentDragPos);
+  }
+
+  private performAction(finalPos: Vector3) {
+    // 执行松手后的逻辑（如发射、释放等）
+    console.log('Released at:', finalPos);
+  }
+}
+```
+
+### 6.4 关键要点
+
+1. **保存拖拽状态**：
+   - 使用 `isDragging` 标志跟踪拖拽状态
+   - 使用 `currentDragPos` 保存最后的拖拽位置
+
+2. **双重松开检测**：
+   ```typescript
+   // PC 端：pointer.phase === PointerPhase.Up
+   if (pointer.phase === PointerPhase.Up && this.isDragging) {
+     this.handlePointerUp();
+   }
+   
+   // 移动端：pointers 为空 + isDragging 为 true
+   else if (this.isDragging) {
+     this.handlePointerUp();
+   }
+   ```
+
+3. **不依赖 pointer 参数**：
+   - `handlePointerUp()` 不应依赖 `pointer` 参数
+   - 松手时需要的数据应该提前保存（如 `currentDragPos`）
+
+4. **状态重置**：
+   - 在 `handlePointerUp()` 中立即设置 `isDragging = false`
+   - 防止下一帧重复触发
+
+### 6.5 实际应用场景
+
+**弹弓发射**（Angry Birds 风格）：
+```typescript
+export class SlingshotScript extends Script {
+  private isDragging: boolean = false;
+  private dragStartPos: Vector3 = new Vector3();
+  private currentDragPos: Vector3 = new Vector3();
+
+  onUpdate() {
+    const pointers = this.engine.inputManager.pointers;
+
+    if (pointers && pointers.length > 0) {
+      const pointer = pointers[0];
+
+      if (pointer.phase === PointerPhase.Down) {
+        const worldPos = this.screenToWorld(pointer.position);
+        if (this.isNearBird(worldPos)) {
+          this.isDragging = true;
+          this.dragStartPos.copyFrom(worldPos);
+        }
+      }
+      else if (pointer.phase === PointerPhase.Move && this.isDragging) {
+        const worldPos = this.screenToWorld(pointer.position);
+        this.currentDragPos.copyFrom(worldPos);
+        this.updateBirdPosition(worldPos);
+      }
+      else if (pointer.phase === PointerPhase.Up && this.isDragging) {
+        this.launchBird();
+      }
+    }
+    // ✅ 移动端松手处理
+    else if (this.isDragging) {
+      this.launchBird();
+    }
+  }
+
+  private launchBird() {
+    this.isDragging = false;
+    
+    // 使用保存的位置计算发射速度
+    const velocity = new Vector3();
+    Vector3.subtract(this.dragStartPos, this.currentDragPos, velocity);
+    velocity.scale(5);
+    
+    this.bird.launch(velocity);
+  }
+}
+```
+
+### 6.6 调试技巧
+
+如果遇到触摸事件问题，可以添加日志：
+
+```typescript
+onUpdate() {
+  const pointers = this.engine.inputManager.pointers;
+  
+  console.log('Pointers:', pointers?.length, 'Dragging:', this.isDragging);
+  
+  if (pointers && pointers.length > 0) {
+    console.log('Pointer phase:', pointers[0].phase);
+  }
+  
+  // ... 其他逻辑
+}
+```
+
+**预期输出**：
+- 触摸按下：`Pointers: 1 Dragging: false` → `Pointers: 1 Dragging: true`
+- 触摸移动：`Pointers: 1 Dragging: true`
+- 触摸松开：`Pointers: 0 Dragging: true` → `Pointers: 0 Dragging: false`
+
+### 6.7 最佳实践总结
+
+| 场景 | 推荐做法 | 避免做法 |
+|------|---------|---------|
+| **检测松手** | 检查 `pointers.length === 0 && isDragging` | 只检查 `pointer.phase === Up` |
+| **保存位置** | 在 Move 阶段持续保存 `currentDragPos` | 在 Up 时才从 pointer 读取 |
+| **状态管理** | 使用 `isDragging` 布尔标志 | 依赖 pointers 数组判断状态 |
+| **参数依赖** | `handlePointerUp()` 使用保存的数据 | `handlePointerUp(pointer)` 依赖参数 |
+
+````
