@@ -325,3 +325,27 @@ async function initCamera(rootEntity: Entity) {
   return camera;
 }
 ```
+### Z轴分层规范
+**问题**: 方块被背景遮挡，渲染顺序混乱  
+**原因**: 所有对象都在 z=0，渲染顺序不确定  
+**解决**: 明确Z轴分层（背景=0, 游戏元素=1, 特效=2）
+
+```typescript
+background.transform.setPosition(x, y, 0);  // 最底层
+block.transform.setPosition(x, y, 1);       // 游戏层
+effect.transform.setPosition(x, y, 2);      // 特效层
+```
+
+### UI区域预留
+**问题**: 移动端预览区域被裁剪  
+**原因**: 相机视野刚好等于游戏板，没有预留UI空间  
+**解决**: 扩大相机视野包含UI区域
+
+```typescript
+// ❌ 刚好覆盖游戏板
+const VIEW_WIDTH = 10, VIEW_HEIGHT = 20;
+
+// ✅ 预留右侧和顶部空间给UI
+const VIEW_WIDTH = 14, VIEW_HEIGHT = 24;  // +4单位预留
+camera.transform.setPosition(6.5, 11.5, 20);  // 调整中心点
+```

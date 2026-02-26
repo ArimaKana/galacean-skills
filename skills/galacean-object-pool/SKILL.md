@@ -352,3 +352,37 @@ A: 检查是否在 `resetFn` 中正确调用了 `setPool()`，且 `get()` 时调
 
 ### Q: 对象池性能优化？
 A: 预创建足够数量的对象，避免运行时再创建。
+
+### 纹理缓存必须
+**问题**: 每帧为每个格子创建纹理导致浏览器崩溃（12000个/秒）  
+**解决**: 用 Map 缓存纹理，每种颜色只创建一次
+
+```typescript
+private textureCache = new Map<string, {texture: Texture2D, sprite: Sprite}>();
+
+getOrCreateSprite(color: Color): Sprite {
+  const key = `${color.r}_${color.g}_${color.b}`;
+  if (!this.textureCache.has(key)) {
+    this.textureCache.set(key, { texture: create(), sprite: new Sprite() });
+  }
+  return this.textureCache.get(key)!.sprite;
+}
+```
+
+### 回收时必须隐藏
+**问题**: 回收的Entity仍然可见或可交互  
+**解决**: 回收时必须设置 `isActive=false` 并移出视野
+
+```typescript
+return(entity: Entity) {
+  entity.isActive = false;  // 必须！
+  entity.transform.setPosition(0, -1000, 0);  // 移出视野
+  this.pool.push(entity);
+}
+```
+
+### 状态存储设计
+**问题**: 棋盘存储颜色，�**问题**: 棋盘存储颜色，�**问题**: 棋盘存储颜色，�**问题**: 棋盘存�cri**问题**: �法回收
+private board: (Cprivate board: (Cprivate board: (Cprivate board: (Cprivate board: (Cprivate board: (Cromino() { this.board[y][x] = entity; }
+clearLines() { this.pool.return(this.board[y][x]); }
+```

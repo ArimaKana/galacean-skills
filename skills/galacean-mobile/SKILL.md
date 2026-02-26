@@ -372,3 +372,26 @@ window.addEventListener('resize', () => {
 - [ ] 无页面滚动
 - [ ] 刘海屏适配正常
 - [ ] 性能流畅（60fps）
+
+### 渲染系统职责分离
+**问题**: 混用Canvas和HTML渲染UI导致定位混乱  
+**原则**: Canvas渲染游戏，HTML渲染UI，避免跨系统
+
+```typescript
+// ❌ 混用：Canvas渲染预览，HTML渲染HUD
+private nextPreviewEntity: Entity;  // Canvas
+private hudElement: HTMLElement;    // HTML
+
+// ✅ 分离：Canvas仅游戏，HTML仅UI
+private board: Entity[][];          // Canvas游戏层
+private nextCells: HTMLDivElement[];  // HTML UI层
+updatePreview() { cell.style.background = color; }  // DOM操作
+```
+
+### 触摸控制布局
+**推荐**: 左侧方向键，右侧功能键，分组间距24px防误触
+
+```css
+#controls { display: flex; justify-content: space-between; gap: 24px; }
+.control-group { display: grid; gap: 8px; }
+```
