@@ -405,3 +405,17 @@ function getColorTexture(engine: Engine, color: Color): Texture2D {
 | 需要复杂特效 | 伪2D + 粒子系统 |
 | 2D角色动画 | 真2D + Sprite动画 |
 | 2.5D效果 | 伪2D + 3D旋转 |
+
+### 棋盘状态存储
+**问题**: 存储颜色无法回收Entity，导致内存泄漏  
+**解决**: 存储Entity引用以支持对象池回收
+
+```typescript
+// ❌ 无法复用Entity
+private board: (Color | null)[][] = [];
+
+// ✅ 支持对象池回收
+private board: (Entity | null)[][] = [];
+lockPiece() { this.board[y][x] = entity; }  // 存储引用
+clearLine() { this.pool.return(this.board[y][x]); }  // 回收
+```
