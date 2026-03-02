@@ -1,6 +1,6 @@
 ---
-name: galacean-physics-lite
-description: 此 Skill 包含了使用 Galacean Engine LitePhysics 物理引擎的注意事项、距离检测替代方案以及常见问题解决方案
+name: galacean-physics
+description: 此 Skill 包含了使用 Galacean Engine 物理引擎的注意事项、距离检测替代方案以及常见问题解决方案
 ---
 
 # Galacean LitePhysics 使用指南
